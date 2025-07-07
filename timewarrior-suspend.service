@@ -1,0 +1,13 @@
+[Unit]
+Description=Pause timewarrior on system suspend/hibernate/poweroff
+Before=sleep.target suspend.target hibernate.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/home/raicem/projects/timewarrior-i3blocks/timewarrior-suspend-handler.sh pre
+ExecStop=/home/raicem/projects/timewarrior-i3blocks/timewarrior-suspend-handler.sh post
+TimeoutStopSec=30
+
+[Install]
+WantedBy=sleep.target suspend.target hibernate.target

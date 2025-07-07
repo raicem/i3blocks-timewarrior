@@ -1,0 +1,7 @@
+# Add this block to your i3blocks configuration file
+# Usually located at ~/.config/i3blocks/config
+
+[timewarrior]
+command=/path/to/timewarrior-i3blocks/timewarrior-i3blocks.sh
+interval=1
+signal=10
