@@ -74,8 +74,44 @@ check_idle_notification() {
     fi
 }
 
+# Function to check for long task duration and send notification
+check_long_task_notification() {
+    local long_task_file="/tmp/timewarrior_long_task_notified"
+    local current_time=$(date +%s)
+    
+    if [ -n "$active_task" ]; then
+        # We have an active task, check its duration
+        local start_time=$(echo "$active_task" | jq -r '.start')
+        local start_iso=$(echo "$start_time" | sed 's/\([0-9]\{8\}\)T\([0-9]\{6\}\)Z/\1T\2Z/' | sed 's/\([0-9]\{4\}\)\([0-9]\{2\}\)\([0-9]\{2\}\)T\([0-9]\{2\}\)\([0-9]\{2\}\)\([0-9]\{2\}\)Z/\1-\2-\3T\4:\5:\6Z/')
+        local task_start=$(iso_to_epoch "$start_iso")
+        local task_duration=$((current_time - task_start))
+        
+        # Check if task has been running for more than 60 minutes (3600 seconds)
+        if [ "$task_duration" -gt 3600 ]; then
+            # Check if we've already notified for this task session
+            if [ ! -f "$long_task_file" ] || [ "$(cat "$long_task_file" 2>/dev/null)" != "$task_start" ]; then
+                # Get task name for notification
+                local tags=$(echo "$active_task" | jq -r '.tags // [] | join(" ")')
+                local task_name="${tags:-Working}"
+                
+                # Send notification
+                notify-send "⏱️ Long Task Alert" "You've been working on '$task_name' for over 60 minutes. Consider taking a break!" --urgency=normal --app-name="timewarrior" 2>/dev/null
+                
+                # Mark this task session as notified
+                echo "$task_start" > "$long_task_file"
+            fi
+        fi
+    else
+        # No active task - clean up notification file
+        rm -f "$long_task_file"
+    fi
+}
+
 # Check for idle notification (but don't output anything from this)
 check_idle_notification >/dev/null 2>&1
+
+# Check for long task notification (but don't output anything from this)
+check_long_task_notification >/dev/null 2>&1
 
 if [ -z "$active_task" ]; then
     # No active task, check if we have a paused task stored
@@ -83,14 +119,7 @@ if [ -z "$active_task" ]; then
         paused_tags=$(cat /tmp/timewarrior_paused_task)
         if [ -n "$paused_tags" ]; then
             task_name="$paused_tags"
-            # Calculate total time for paused task
-            total_paused_duration=$(echo "$timew_data" | jq -r --arg task_tags "$paused_tags" '
-                map(select(has("end") and (.tags // [] | join(" ") == $task_tags))) | 
-                map((.end | strptime("%Y%m%dT%H%M%SZ") | mktime) - (.start | strptime("%Y%m%dT%H%M%SZ") | mktime)) | 
-                add // 0
-            ')
-            duration_str=$(format_duration $total_paused_duration)
-            echo "⏸️ $task_name ($duration_str)"
+            echo "⏸️ $task_name (paused)"
         else
             echo "⏸️ Working (paused)"
         fi
@@ -108,26 +137,18 @@ tags=$(echo "$active_task" | jq -r '.tags // [] | join(" ")')
 # Convert timewarrior timestamp format (20250707T142832Z) to standard ISO format
 start_iso=$(echo "$start_time" | sed 's/\([0-9]\{8\}\)T\([0-9]\{6\}\)Z/\1T\2Z/' | sed 's/\([0-9]\{4\}\)\([0-9]\{2\}\)\([0-9]\{2\}\)T\([0-9]\{2\}\)\([0-9]\{2\}\)\([0-9]\{2\}\)Z/\1-\2-\3T\4:\5:\6Z/')
 
-# Calculate total duration for this task (including previous sessions)
+# Calculate current session duration only
 current_session_start=$(iso_to_epoch "$start_iso")
 current_epoch=$(date +%s)
 current_session_duration=$((current_epoch - current_session_start))
 
-# Get total duration for all completed sessions of this task
+# Set task name
 if [ -n "$tags" ]; then
     task_name="$tags"
-    # Calculate total time from all previous sessions with the same tags
-    total_previous_duration=$(echo "$timew_data" | jq -r --arg task_tags "$tags" '
-        map(select(has("end") and (.tags // [] | join(" ") == $task_tags))) | 
-        map((.end | strptime("%Y%m%dT%H%M%SZ") | mktime) - (.start | strptime("%Y%m%dT%H%M%SZ") | mktime)) | 
-        add // 0
-    ')
 else
     task_name="Working"
-    total_previous_duration=0
 fi
 
-total_duration=$((total_previous_duration + current_session_duration))
-duration_str=$(format_duration $total_duration)
+duration_str=$(format_duration $current_session_duration)
 
 echo "⏱️ $task_name ($duration_str)"

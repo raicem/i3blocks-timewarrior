@@ -6,6 +6,7 @@ A comprehensive integration between [Timewarrior](https://timewarrior.net/) and 
 
 - **Click to pause/resume**: Left-click the status bar item to pause/resume timers
 - **Idle notifications**: Reminds you after 10 minutes of inactivity
+- **Long task alerts**: Notifies you when working on the same task for over 60 minutes
 - **Auto-pause**: Automatically pauses tasks when system suspends/hibernates/shuts down
 - **Status icons**: ⏱️ for active tasks, ⏸️ for paused tasks
 
@@ -13,7 +14,7 @@ A comprehensive integration between [Timewarrior](https://timewarrior.net/) and 
 
 The status bar shows:
 - Active timer: `⏱️ work project 01:23:45`
-- Paused timer: `⏸️ work project 01:23:45`
+- Paused timer: `⏸️ work project (paused)`
 
 ## Prerequisites
 
