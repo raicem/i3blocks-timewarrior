@@ -4,6 +4,41 @@
 # A script to show current timewarrior task in i3blocks
 # Left click pauses/resumes the current timer
 
+# Load configuration
+load_config() {
+    # Set default values
+    IDLE_NOTIFICATION_INTERVAL=600  # 10 minutes default
+    LONG_TASK_NOTIFICATION_INTERVAL=3600  # 60 minutes default
+    
+    # XDG config directory
+    local config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/timewarrior-i3blocks"
+    local config_file="$config_dir/config"
+    
+    if [ -f "$config_file" ]; then
+        # Source the config file safely
+        while IFS='=' read -r key value; do
+            # Skip empty lines and comments
+            [[ -z "$key" || "$key" =~ ^[[:space:]]*# ]] && continue
+            
+            # Remove leading/trailing whitespace and quotes
+            key=$(echo "$key" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+            value=$(echo "$value" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//;s/^["'"'"']//;s/["'"'"']$//')
+            
+            case "$key" in
+                "idle_notification_interval")
+                    IDLE_NOTIFICATION_INTERVAL="$value"
+                    ;;
+                "long_task_notification_interval")
+                    LONG_TASK_NOTIFICATION_INTERVAL="$value"
+                    ;;
+            esac
+        done < "$config_file"
+    fi
+}
+
+# Load configuration at startup
+load_config
+
 # Function to convert ISO timestamp to epoch
 iso_to_epoch() {
     date -d "$1" +%s 2>/dev/null || echo 0
@@ -62,7 +97,7 @@ check_idle_notification() {
             local idle_start=$(cat "$idle_file" 2>/dev/null || echo "$current_time")
             local idle_duration=$((current_time - idle_start))
             
-            if [ "$idle_duration" -gt 600 ]; then
+            if [ "$idle_duration" -gt "$IDLE_NOTIFICATION_INTERVAL" ]; then
                 # Send notification and reset timer
                 notify-send "⏱️ Timewarrior Reminder" "You haven't been tracking time for a while. What are you working on?" --urgency=low --app-name="timewarrior" 2>/dev/null
                 echo "$current_time" > "$idle_file"
@@ -86,8 +121,8 @@ check_long_task_notification() {
         local task_start=$(iso_to_epoch "$start_iso")
         local task_duration=$((current_time - task_start))
         
-        # Check if task has been running for more than 60 minutes (3600 seconds)
-        if [ "$task_duration" -gt 3600 ]; then
+        # Check if task has been running for more than the configured long task interval
+        if [ "$task_duration" -gt "$LONG_TASK_NOTIFICATION_INTERVAL" ]; then
             # Check if we've already notified for this task session
             if [ ! -f "$long_task_file" ] || [ "$(cat "$long_task_file" 2>/dev/null)" != "$task_start" ]; then
                 # Get task name for notification
@@ -95,7 +130,8 @@ check_long_task_notification() {
                 local task_name="${tags:-Working}"
                 
                 # Send notification
-                notify-send "⏱️ Long Task Alert" "You've been working on '$task_name' for over 60 minutes. Consider taking a break!" --urgency=normal --app-name="timewarrior" 2>/dev/null
+                local minutes=$((LONG_TASK_NOTIFICATION_INTERVAL / 60))
+                notify-send "⏱️ Long Task Alert" "You've been working on '$task_name' for over $minutes minutes. Consider taking a break!" --urgency=normal --app-name="timewarrior" 2>/dev/null
                 
                 # Mark this task session as notified
                 echo "$task_start" > "$long_task_file"
